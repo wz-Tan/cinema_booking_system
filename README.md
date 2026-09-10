@@ -1,5 +1,5 @@
 ## A Cinema Booking System implemented with Go. 
-Tutorial for:
+Includes:
 - Mutual Exclusion
 - Redis
 - Postgresql

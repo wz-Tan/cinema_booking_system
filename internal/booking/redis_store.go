@@ -57,12 +57,8 @@ func (s *RedisStore) hold(b Booking) (Booking, error) {
 		return Booking{}, ErrSeatAlreadyBooked
 	}
 
-	log.Printf("No problem creating booking")
-
 	// Set Session
 	s.rdb.Set(ctx, sessionKey(id), key, defaultHoldTTL)
-
-	log.Printf("No problem creating sesion")
 
 	return Booking{
 		ID:        id,
@@ -89,6 +85,50 @@ func (s *RedisStore) Book(b Booking) error {
 	return nil
 }
 
-func (s *RedisStore) ListBookings(movieID string) []Booking {
-	return []Booking{}
+func (s *RedisStore) ListBookings(movieID string) ([]Booking, error) {
+	pattern := fmt.Sprintf("seat:%s:*", movieID)
+	var sessions []Booking
+
+	ctx := context.Background()
+
+	// Array of Seats That Match the Pattern
+	iter := s.rdb.Scan(ctx, 0, pattern, 0).Iterator()
+
+	// Counter for Iterator
+	for iter.Next(ctx) {
+		// Returns JSON String
+		val, err := s.rdb.Get(ctx, iter.Val()).Result()
+		if err != nil {
+			continue
+		}
+
+		// Parse String into Booking Struct
+		session, err := parseBooking(val)
+		if err != nil {
+			continue
+		}
+
+		sessions = append(sessions, session)
+
+	}
+
+	return sessions, nil
+}
+
+func parseBooking(val string) (Booking, error) {
+	booking := Booking{}
+
+	// Parses JSON into Bytes then Write Into Struct
+	if err := json.Unmarshal([]byte(val), &booking); err != nil {
+		return Booking{}, err
+	}
+
+	// New Booking Object -> We Dont Need the Expiration Time for a Confirmed Session
+	return Booking{
+		ID:      booking.ID,
+		MovieID: booking.MovieID,
+		SeatID:  booking.SeatID,
+		UserID:  booking.UserID,
+		Status:  booking.Status,
+	}, nil
 }

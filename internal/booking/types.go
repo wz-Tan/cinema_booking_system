@@ -17,7 +17,7 @@ type Booking struct {
 // Handler for Booking and Listing Bookings
 type BookingStore interface {
 	Book(b Booking) error
-	ListBookings(movieID string) []Booking
+	ListBookings(movieID string) ([]Booking, error)
 }
 
 var (

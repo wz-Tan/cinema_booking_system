@@ -1,13 +1,17 @@
 package booking
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 type Booking struct {
-	ID      string
-	MovieID string
-	SeatID  string
-	UserID  string
-	Status  string
+	ID        string
+	MovieID   string
+	SeatID    string
+	UserID    string
+	Status    string
+	ExpiresAt time.Time
 }
 
 // Handler for Booking and Listing Bookings

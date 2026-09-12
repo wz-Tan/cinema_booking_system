@@ -1,6 +1,7 @@
 package booking
 
 import (
+	"cinema_booking_system/internal/adapters/ownRedis"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestConcurrentBooking_ExactlyOneWins(t *testing.T) {
-	store := NewConcurrentStore()
+	store := NewRedisStore(ownRedis.NewClient("localhost:6379"))
 	svc := NewService(store)
 
 	const numGoroutines = 100_000 // 100k users trying to book a seat at the same time

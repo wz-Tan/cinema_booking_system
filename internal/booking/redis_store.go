@@ -30,37 +30,20 @@ func NewRedisStore(rdb *redis.Client) *RedisStore {
 }
 
 // String Parser for Session
-func sessionKey(id string) string {
+func parseSessionKey(id string) string {
 	return fmt.Sprintf("Session %s", id)
 }
 
 // Commit Booking
 func (s *RedisStore) ConfirmSession(ctx context.Context, sessionID string, userID string) error {
-	// Special Processing
-	sessionID = sessionKey(sessionID)
 
-	// Get the DB Key
-	res, err := s.rdb.Get(ctx, sessionID).Result()
+	session, sessionKey, err := s.getSession(ctx, sessionID, userID)
 
 	if err != nil {
-		return errors.New("Error Acquiring DB Key")
+		return errors.New(err.Error())
 	}
 
 	// Make Permanent (Extract Booking, Edit Status, Overwrite)
-	// Get Booking JSON object
-	b, err := s.rdb.Get(ctx, res).Result()
-
-	// Parse it
-	session, err := parseBooking(b)
-	if err != nil {
-		return errors.New("Error converting DB field to session.")
-	}
-
-	// Verify Ownership
-	if session.UserID != userID {
-		return errors.New("Invalid Request from Non User")
-	}
-
 	// Change Status
 	session.Status = "confirmed"
 
@@ -68,7 +51,7 @@ func (s *RedisStore) ConfirmSession(ctx context.Context, sessionID string, userI
 	val, _ := json.Marshal(session)
 
 	// Overwrite in DB
-	overwriteRes := s.rdb.Set(ctx, res, val, 0)
+	overwriteRes := s.rdb.Set(ctx, sessionKey, val, 0)
 	if overwriteRes.Err() != nil {
 		return errors.New("Error Overwriting Data")
 	}
@@ -82,40 +65,52 @@ func (s *RedisStore) ConfirmSession(ctx context.Context, sessionID string, userI
 
 // Release Booking
 func (s *RedisStore) ReleaseSession(ctx context.Context, sessionID string, userID string) error {
-	// Special Processing
-	sessionID = sessionKey(sessionID)
 
-	// Get the DB Key
-	res, err := s.rdb.Get(ctx, sessionID).Result()
+	_, sessionKey, err := s.getSession(ctx, sessionID, userID)
 
 	if err != nil {
-		return errors.New("Error Acquiring DB Key")
-	}
-
-	// Get Booking JSON object
-	b, err := s.rdb.Get(ctx, res).Result()
-
-	// Parse it
-	session, err := parseBooking(b)
-	if err != nil {
-		return errors.New("Error converting DB field to session.")
-	}
-
-	// Verify Ownership
-	if session.UserID != userID {
-		return errors.New("Invalid Request from Non User")
+		return errors.New(err.Error())
 	}
 
 	// Remove from Bookings Table
-	if err := s.rdb.Del(ctx, res).Err(); err != nil {
+	if err := s.rdb.Del(ctx, sessionKey).Err(); err != nil {
 		return errors.New("Error Releasing Booking")
 	}
 
 	// Remove from Reverse Key Table
-	if err := s.rdb.Del(ctx, sessionID).Err(); err != nil {
+	if err := s.rdb.Del(ctx, parseSessionKey(sessionID)).Err(); err != nil {
 		return errors.New("Error Releasing Key")
 	}
 	return nil
+}
+
+// Get Session / Booking from DB after Verifying (Return booking -> For editing, string -> booking key)
+func (s *RedisStore) getSession(ctx context.Context, sessionID string, userID string) (Booking, string, error) {
+	// Special Processing
+	sessionID = parseSessionKey(sessionID)
+
+	// Get the DB Key
+	sessionKey, err := s.rdb.Get(ctx, sessionID).Result()
+
+	if err != nil {
+		return Booking{}, "", errors.New("Error Acquiring DB Key")
+	}
+
+	// Get Booking JSON object
+	b, err := s.rdb.Get(ctx, sessionKey).Result()
+
+	// Parse it
+	session, err := parseBooking(b)
+	if err != nil {
+		return Booking{}, "", errors.New("Error converting DB field to session.")
+	}
+
+	// Verify Ownership
+	if session.UserID != userID {
+		return Booking{}, "", errors.New("Invalid Request from Non User")
+	}
+
+	return session, sessionKey, nil
 }
 
 // Create Booking
@@ -143,7 +138,7 @@ func (s *RedisStore) hold(b Booking) (Booking, error) {
 	}
 
 	// Set Session
-	s.rdb.Set(ctx, sessionKey(id), key, defaultHoldTTL)
+	s.rdb.Set(ctx, parseSessionKey(id), key, defaultHoldTTL)
 
 	return Booking{
 		ID:        id,

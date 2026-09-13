@@ -389,18 +389,19 @@
         function renderMovies() {
           var container = document.getElementById("movieList");
           container.innerHTML = "";
+          console.log("Received movies are",movies)
           movies.forEach(function (m) {
             var card = document.createElement("div");
             card.className =
               "movie-card" +
-              (selectedMovie && selectedMovie.ID === m.ID ? " selected" : "");
+              (selectedMovie && selectedMovie.id === m.id ? " selected" : "");
             card.innerHTML =
               "<h3>" +
-              escapeHtml(m.Title) +
+              escapeHtml(m.title) +
               "</h3><p>" +
               m.Rows +
               " rows &times; " +
-              m.SeatsPerRow +
+              m.seats_per_row +
               " seats</p>";
             card.addEventListener("click", function () {
               selectMovie(m);
@@ -434,7 +435,7 @@
 
         function fetchSeats() {
           if (!selectedMovie) return;
-          api("GET", "/movies/" + selectedMovie.ID + "/seats").then(
+          api("GET", "/movies/" + selectedMovie.id + "/seats").then(
             function (seats) {
               renderGrid(seats);
             },
@@ -458,7 +459,7 @@
             label.textContent = rowLabels[r];
             rowDiv.appendChild(label);
 
-            for (var s = 1; s <= selectedMovie.SeatsPerRow; s++) {
+            for (var s = 1; s <= selectedMovie.seats_per_row; s++) {
               var seatID = rowLabels[r] + s;
               var btn = document.createElement("button");
               btn.className = "seat";
@@ -499,7 +500,7 @@
           if (activeSession) return; // already holding a seat
           api(
             "POST",
-            "/movies/" + selectedMovie.ID + "/seats/" + seatID + "/hold",
+            "/movies/" + selectedMovie.id + "/seats/" + seatID + "/hold",
             { user_id: userID },
           )
             .then(function (data) {

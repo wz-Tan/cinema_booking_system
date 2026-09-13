@@ -3,6 +3,7 @@ package booking
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -31,6 +32,90 @@ func NewRedisStore(rdb *redis.Client) *RedisStore {
 // String Parser for Session
 func sessionKey(id string) string {
 	return fmt.Sprintf("Session %s", id)
+}
+
+// Commit Booking
+func (s *RedisStore) ConfirmSession(ctx context.Context, sessionID string, userID string) error {
+	// Special Processing
+	sessionID = sessionKey(sessionID)
+
+	// Get the DB Key
+	res, err := s.rdb.Get(ctx, sessionID).Result()
+
+	if err != nil {
+		return errors.New("Error Acquiring DB Key")
+	}
+
+	// Make Permanent (Extract Booking, Edit Status, Overwrite)
+	// Get Booking JSON object
+	b, err := s.rdb.Get(ctx, res).Result()
+
+	// Parse it
+	session, err := parseBooking(b)
+	if err != nil {
+		return errors.New("Error converting DB field to session.")
+	}
+
+	// Verify Ownership
+	if session.UserID != userID {
+		return errors.New("Invalid Request from Non User")
+	}
+
+	// Change Status
+	session.Status = "confirmed"
+
+	// Turn Back into JSON
+	val, _ := json.Marshal(session)
+
+	// Overwrite in DB
+	overwriteRes := s.rdb.Set(ctx, res, val, 0)
+	if overwriteRes.Err() != nil {
+		return errors.New("Error Overwriting Data")
+	}
+
+	// Persist Key
+	if err := s.rdb.Persist(ctx, sessionID).Err(); err != nil {
+		return errors.New("Error Confirming Key")
+	}
+	return nil
+}
+
+// Release Booking
+func (s *RedisStore) ReleaseSession(ctx context.Context, sessionID string, userID string) error {
+	// Special Processing
+	sessionID = sessionKey(sessionID)
+
+	// Get the DB Key
+	res, err := s.rdb.Get(ctx, sessionID).Result()
+
+	if err != nil {
+		return errors.New("Error Acquiring DB Key")
+	}
+
+	// Get Booking JSON object
+	b, err := s.rdb.Get(ctx, res).Result()
+
+	// Parse it
+	session, err := parseBooking(b)
+	if err != nil {
+		return errors.New("Error converting DB field to session.")
+	}
+
+	// Verify Ownership
+	if session.UserID != userID {
+		return errors.New("Invalid Request from Non User")
+	}
+
+	// Remove from Bookings Table
+	if err := s.rdb.Del(ctx, res).Err(); err != nil {
+		return errors.New("Error Releasing Booking")
+	}
+
+	// Remove from Reverse Key Table
+	if err := s.rdb.Del(ctx, sessionID).Err(); err != nil {
+		return errors.New("Error Releasing Key")
+	}
+	return nil
 }
 
 // Create Booking
@@ -71,18 +156,18 @@ func (s *RedisStore) hold(b Booking) (Booking, error) {
 }
 
 // Commit to Booking
-func (s *RedisStore) Book(b Booking) error {
+func (s *RedisStore) Book(b Booking) (Booking, error) {
 	session, err := s.hold(b)
 
 	// Error Holding
 	if err != nil {
-		return err
+		return Booking{}, err
 	}
 
 	// No Problem Holding
-	log.Printf("Session booked %v", session)
+	log.Printf("Session created %v", session)
 
-	return nil
+	return session, nil
 }
 
 func (s *RedisStore) ListBookings(movieID string) ([]Booking, error) {

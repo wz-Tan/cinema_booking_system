@@ -22,7 +22,14 @@ func main() {
 	svc := booking.NewService(store)
 	bookingHandler := booking.NewHandler(svc)
 
-	mux.HandleFunc("GET /movies/:movieID/seats", bookingHandler.ListSeats)
+	mux.HandleFunc("GET /movies/{movieID}/seats", bookingHandler.ListSeats)
+
+	// Hold The Seat
+	mux.HandleFunc("POST /movies/{movieID}/seats/{seatID}/hold", bookingHandler.HoldSeat)
+
+	// Confirm and Delete Session
+	mux.HandleFunc("PUT /sessions/{sessionID}/confirm", bookingHandler.ConfirmSession)
+	mux.HandleFunc("DELETE /sessions/{sessionID}", bookingHandler.ReleaseSession)
 
 	// Simple Server
 	if err := http.ListenAndServe(":8080", mux); err != nil {
